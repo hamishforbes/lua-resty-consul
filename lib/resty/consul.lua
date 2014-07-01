@@ -3,8 +3,8 @@ local cjson = require('cjson')
 local json_decode = cjson.decode
 local json_encode = cjson.encode
 local tbl_concat = table.concat
+local tbl_insert = table.insert
 local ngx = ngx
-local ngx_socket_tcp = ngx.socket.tcp
 local ngx_log = ngx.log
 local ngx_ERR = ngx.ERR
 local ngx_DEBUG = ngx.DEBUG
@@ -14,12 +14,28 @@ local _M = {
     _VERSION = '0.01',
 }
 
-local API_VERSION = "v1"
-local DEFAULT_HOST = "127.0.0.1"
-local DEFAULT_PORT = 8500
+local API_VERSION     = "v1"
+local DEFAULT_HOST    = "127.0.0.1"
+local DEFAULT_PORT    = 8500
 local DEFAULT_TIMEOUT = 60*1000 -- 60s efault timeout
 
 local mt = { __index = _M }
+
+
+function _M.new(_, opts)
+    local self = {
+        host            = opts.host            or DEFAULT_HOST,
+        port            = opts.port            or DEFAULT_PORT,
+        connect_timeout = opts.connect_timeout or DEFAULT_TIMEOUT,
+        read_timeout    = opts.read_timeout    or DEFAULT_TIMEOUT
+    }
+    return setmetatable(self, mt)
+end
+
+
+function _M.get_client_body_reader(self, ...)
+    return http:get_client_body_reader(...)
+end
 
 
 local function safe_json_decode(json_str)
@@ -40,28 +56,11 @@ local function build_uri(key, opts)
         for k,v in pairs(opts) do
             tbl_insert(params, k.."="..v)
         end
-        uri = uri.."?"..tbl_concat(opts, "&")
+        uri = uri.."?"..tbl_concat(params, "&")
     end
 
     return uri
 end
-
-
-function _M.new(_, opts)
-    local self = {
-        host            = opts.host            or DEFAULT_HOST,
-        port            = opts.port            or DEFAULT_PORT,
-        connect_timeout = opts.connect_timeout or DEFAULT_TIMEOUT,
-        read_timeout    = opts.read_timeout    or DEFAULT_TIMEOUT
-    }
-    return setmetatable(self, mt)
-end
-
-
-function _M.get_client_body_reader(self, ...)
-    return http:get_client_body_reader(...)
-end
-
 
 local function connect(self)
     local httpc = http.new()
@@ -118,14 +117,11 @@ function _M.get(self, key, opts)
 
     if opts and (opts.wait or opts.index) then
         -- Blocking request, increase timeout
-        local timeout = 10 * 60 -- Default timeout is 10m
+        local timeout = 10 * 60 * 1000 -- Default timeout is 10m
         if opts.wait then
             timeout = opts.wait * 1000
         end
-        local ok,err = httpc:set_timeout(timeout)
-        if not ok then
-            return ok, err
-        end
+        httpc:set_timeout(timeout)
     else
         httpc:set_timeout(self.read_timeout)
     end
