@@ -55,11 +55,14 @@ local function build_uri(key, opts)
     if opts then
         local params = {}
         for k,v in pairs(opts) do
+            if k == "wait" then
+                v = v.."s"
+            end
             tbl_insert(params, k.."="..tostring(v))
         end
         uri = uri.."?"..tbl_concat(params, "&")
     end
-
+    
     return uri
 end
 
