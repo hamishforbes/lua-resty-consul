@@ -1,4 +1,5 @@
 local pcall = pcall
+local tostring = tostring
 local cjson = require('cjson')
 local json_decode = cjson.decode
 local json_encode = cjson.encode
@@ -54,7 +55,7 @@ local function build_uri(key, opts)
     if opts then
         local params = {}
         for k,v in pairs(opts) do
-            tbl_insert(params, k.."="..v)
+            tbl_insert(params, k.."="..tostring(v))
         end
         uri = uri.."?"..tbl_concat(params, "&")
     end
