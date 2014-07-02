@@ -62,7 +62,7 @@ local function build_uri(key, opts)
         end
         uri = uri.."?"..tbl_concat(params, "&")
     end
-    
+
     return uri
 end
 
@@ -200,7 +200,7 @@ function _M.put(self, key, value, opts)
     end
 
     httpc:set_keepalive()
-    return (body == "true\n")
+    return safe_json_decode(body)
 end
 
 
