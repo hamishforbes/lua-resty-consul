@@ -115,7 +115,6 @@ end
 function _M.get(self, key, opts)
     local httpc, err = connect(self)
     if not httpc then
-        ngx_log(ngx_ERR, err)
         return nil, err
     end
 
