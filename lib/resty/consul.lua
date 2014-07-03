@@ -180,10 +180,18 @@ function _M.put(self, key, value, opts)
 
     local uri = build_uri(key, opts)
 
+    local body_in
+
+    if type(value) == "table" then
+        body_in = json_encode(value)
+    else
+        body_in = value
+    end
+
     local res, err = httpc:request({
         method = "PUT",
         path = uri,
-        body = value
+        body = body_in
     })
     if not res then
         return nil, err
@@ -199,7 +207,15 @@ function _M.put(self, key, value, opts)
     end
 
     httpc:set_keepalive()
-    return safe_json_decode(body)
+
+    -- If status is not 200 then body is most likely an error message
+    if res.status ~= 200 then
+        return nil, body
+    elseif #body > 0 then
+        return safe_json_decode(body)
+    else
+        return true
+    end
 end
 
 
