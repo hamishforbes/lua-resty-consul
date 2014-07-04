@@ -174,7 +174,6 @@ end
 function _M.put(self, key, value, opts)
     local httpc, err = connect(self)
     if not httpc then
-        ngx_log(ngx_ERR, err)
         return nil, err
     end
 
@@ -222,7 +221,6 @@ end
 function _M.delete(self, key, recurse)
     local httpc, err = connect(self)
     if not httpc then
-        ngx_log(ngx_ERR, err)
         return nil, err
     end
 
@@ -253,7 +251,7 @@ function _M.delete(self, key, recurse)
     if res.status == 200 then
         return true
     end
-        -- DELETE seems to return 200 regardless, but just in case
+    -- DELETE seems to return 200 regardless, but just in case
     return {status = res.status, body = body, headers = res.headers}, err
 end
 
