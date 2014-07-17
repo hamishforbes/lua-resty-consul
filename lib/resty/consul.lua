@@ -85,7 +85,7 @@ end
 
 local function _get(httpc, key, opts)
     local uri = build_uri(key, opts)
-    
+
     local res, err = httpc:request({path = uri})
     if not res then
         return nil, err
