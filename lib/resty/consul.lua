@@ -9,6 +9,7 @@ local ngx = ngx
 local ngx_log = ngx.log
 local ngx_ERR = ngx.ERR
 local ngx_DEBUG = ngx.DEBUG
+local ngx_encode_args = ngx.encode_args
 local http = require('resty.http')
 
 local _M = {
@@ -53,14 +54,14 @@ local function build_uri(key, opts)
     local uri = "/"..API_VERSION..key
 
     if opts then
-        local params = {}
-        for k,v in pairs(opts) do
-            if k == "wait" then
-                v = v.."s"
-            end
-            tbl_insert(params, k.."="..tostring(v))
+        if opts.wait then
+            opts.wait = opts.wait.."s"
         end
-        uri = uri.."?"..tbl_concat(params, "&")
+
+        local params = ngx_encode_args(opts)
+        if #params > 0 then
+            uri = uri.."?"..params
+        end
     end
 
     return uri
@@ -162,16 +163,30 @@ function _M.get_json_decoded(self, key, opts)
         return nil, err
     end
     for _,entry in ipairs(res) do
-        local decoded = safe_json_decode(entry.Value)
-        if decoded ~= nil then
-            entry.Value = decoded
+        if entry.Value ~= nil then
+            local decoded = safe_json_decode(entry.Value)
+            if decoded ~= nil then
+                entry.Value = decoded
+            end
         end
     end
     return res, err
 end
 
 
-function _M.put(self, key, value, opts)
+function _M.put(self, key, value, opts,lock,session_id)
+    if not opts then
+        opts = {}
+    end
+
+    if lock ~= nil then
+        if lock then
+            opts.acquire = session_id
+        else
+            opts.release = session_id
+        end
+    end
+
     local httpc, err = connect(self)
     if not httpc then
         return nil, err
@@ -180,8 +195,7 @@ function _M.put(self, key, value, opts)
     local uri = build_uri(key, opts)
 
     local body_in
-
-    if type(value) == "table" then
+    if type(value) == "table" or type(value) == "boolean" then
         body_in = json_encode(value)
     else
         body_in = value
@@ -210,7 +224,7 @@ function _M.put(self, key, value, opts)
     -- If status is not 200 then body is most likely an error message
     if res.status ~= 200 then
         return nil, body
-    elseif #body > 0 then
+    elseif body and #body > 0 then
         return safe_json_decode(body)
     else
         return true
