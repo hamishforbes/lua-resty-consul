@@ -174,17 +174,9 @@ function _M.get_json_decoded(self, key, opts)
 end
 
 
-function _M.put(self, key, value, opts,lock,session_id)
+function _M.put(self, key, value, opts)
     if not opts then
         opts = {}
-    end
-
-    if lock ~= nil then
-        if lock then
-            opts.acquire = session_id
-        else
-            opts.release = session_id
-        end
     end
 
     local httpc, err = connect(self)
