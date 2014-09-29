@@ -19,7 +19,7 @@ local _M = {
 local API_VERSION     = "v1"
 local DEFAULT_HOST    = "127.0.0.1"
 local DEFAULT_PORT    = 8500
-local DEFAULT_TIMEOUT = 60*1000 -- 60s efault timeout
+local DEFAULT_TIMEOUT = 60*1000 -- 60s default timeout
 
 local mt = { __index = _M }
 
