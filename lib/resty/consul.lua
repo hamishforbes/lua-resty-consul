@@ -109,7 +109,7 @@ local function _get(httpc, key, opts)
 
     local response = safe_json_decode(body)
     local headers = res.headers
-    return response, headers["X-Consul-Lastcontact"], headers["X-Consul-Knownleader"]
+    return response, headers["X-Consul-Lastcontact"], headers["X-Consul-Knownleader"], headers["X-Consul-Index"]
 end
 
 
@@ -130,13 +130,13 @@ function _M.get(self, key, opts)
         httpc:set_timeout(self.read_timeout)
     end
 
-    local res, lastcontact_or_err, knownleader = _get(httpc, key, opts)
+    local res, lastcontact_or_err, knownleader, consul_index = _get(httpc, key, opts)
     httpc:set_keepalive()
     if not res then
         return nil, lastcontact_or_err
     end
 
-    return res, {lastcontact_or_err, knownleader}
+    return res, {lastcontact_or_err, knownleader, consul_index}
 end
 
 
