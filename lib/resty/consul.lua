@@ -136,7 +136,7 @@ function _M.get(self, key, opts)
         return nil, lastcontact_or_err
     end
 
-    return res, {lastcontact_or_err, knownleader, consul_index}
+    return res, {lastcontact_or_err or false, knownleader or false, consul_index or false}
 end
 
 
