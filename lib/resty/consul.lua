@@ -107,12 +107,12 @@ local function _get(httpc, key, opts)
         return nil, err
     end
 
+    local headers = res.headers
     local response = {}
-    if res.headers.content_type == 'application/json' then
+    if headers.content_type == 'application/json' then
 	    response = safe_json_decode(body)
     end
 
-    local headers = res.headers
     return response, headers["X-Consul-Lastcontact"], headers["X-Consul-Knownleader"], headers["X-Consul-Index"]
 end
 
