@@ -23,7 +23,7 @@ Library to interface with the consul HTTP API from ngx_lua
 
 local resty_consul = require('resty.consul')
 local consul = resty_consul:new({
-        host = 10.10.10.10,
+        host = '10.10.10.10',
         port = 8500
     })
 
@@ -41,20 +41,20 @@ local res,err = consul:get('/kv/foobar')
 if not res then
     ngx.log(ngx.ERR, err)
 end
-ngx.say(res.Value) -- Prints "TXkga2V5IHZhbHVlIQo="
+ngx.say(res[1].Value) -- Prints "TXkga2V5IHZhbHVlIQo="
 
 local res,err = consul:get_decoded('/kv/foobar')
 if not res then
     ngx.log(ngx.ERR, err)
 end
-ngx.say(res.Value) -- Prints "My key value!"
+ngx.say(res[1].Value) -- Prints "My key value!"
 
 local res, err = consul:get_json_decoded('/kv/some_json')
 if not res then
     ngx.log(ngx.ERR, err)
 end
-if type(res.Value) == 'table' then
-    ngx.say(res.Value.msg) -- Prints "This will be json encoded"
+if type(res[1].Value) == 'table' then
+    ngx.say(res[1].Value.msg) -- Prints "This will be json encoded"
 else
     ngx.log(ngx.ERR, "Failed to decode value :(")
 end
