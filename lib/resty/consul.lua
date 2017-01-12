@@ -265,4 +265,224 @@ function _M.delete(self, key, recurse)
     return {status = res.status, body = body, headers = res.headers}, err
 end
 
+
+local function _put_txn(httpc, key, body_in, opts)
+    local uri = build_uri("/txn", opts)
+
+    local res, err = httpc:request({
+        method = "PUT",
+        path = uri,
+        body = body_in
+    })
+    if not res then
+        return nil, err
+    end
+
+    local status = res.status
+    if not status then
+        return nil, "No status from consul"
+    end
+
+    local body, err = res:read_body()
+    if not body then
+        return nil, err
+    end
+
+    httpc:set_keepalive()
+
+    local headers = res.headers
+    if headers.content_type == 'application/json' then
+        body = safe_json_decode(body)
+    end
+
+    if status ~= 200 then
+        if status == 409 then
+            return nil, json_encode(body.Errors)
+        else
+            return nil, "Consul returned: HTTP "..status
+        end
+    end
+
+    return body, err
+end
+
+
+local function _put_txn_decoded(httpc, key, body_in, opts)
+    local res, err = _put_txn(httpc, key, body_in, opts)
+    httpc:set_keepalive()
+    if not res then
+        return nil, err
+    end
+
+    for _,entry in ipairs(res.Results) do
+        if type(entry.KV.Value) == "string" then
+            local decoded = ngx.decode_base64(entry.KV.Value)
+            if decoded ~= nil then
+                entry.KV.Value = decoded
+            end
+        end
+    end
+
+    return res, err
+end
+
+
+function _M.txn(self, verb, key, opts)
+    local httpc, err = connect(self)
+    if not httpc then
+        return nil, err
+    end
+
+    local body_in = {}
+
+    if type(key) == "string" then
+        key = safe_json_decode(key)
+    end
+
+    if type(key) == "table" then
+        for _,v in pairs(key) do
+            local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
+            table.insert(body_in, entry)
+        end
+        body_in = json_encode(body_in)
+    else
+        return nil, "key needs to be table or JSON formatted string, not "..type(key)
+    end
+
+    local res, err = _put_txn(httpc, key, body_in, opts)
+    httpc:set_keepalive()
+    if not res then
+        return nil, err
+    end
+
+    return res, err
+end
+
+
+function _M.txn_json(self, verb, key, opts)
+    local httpc, err = connect(self)
+    if not httpc then
+        return nil, err
+    end
+
+    local body_in = {}
+
+    if type(key) == "string" then
+        key = safe_json_decode(key)
+    end
+
+    if type(key) == "table" then
+        for _,v in pairs(key) do
+            local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
+            table.insert(body_in, entry)
+        end
+        body_in = json_encode(body_in)
+    else
+        return nil, "key needs to be table or JSON formatted string, not "..type(key)
+    end
+
+    local res, err = _put_txn(httpc, key, body_in, opts)
+    httpc:set_keepalive()
+    if not res then
+        return nil, err
+    end
+
+    return json_encode(res), err
+end
+
+
+function _M.txn_decoded(self, verb, key, opts)
+    local httpc, err = connect(self)
+    if not httpc then
+        return nil, err
+    end
+
+    local body_in = {}
+
+    if type(key) == "string" then
+        key = safe_json_decode(key)
+    end
+
+    if type(key) == "table" then
+        for _,v in pairs(key) do
+            local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
+            table.insert(body_in, entry)
+        end
+        body_in = json_encode(body_in)
+    else
+        return nil, "key needs to be table or JSON formatted string, not "..type(key)
+    end
+
+    local res, err = _put_txn_decoded(httpc, key, body_in, opts)
+    httpc:set_keepalive()
+    if not res then
+        return nil, err
+    end
+
+    return res, err
+end
+
+
+function _M.txn_decoded_json(self, verb, key, opts)
+    local httpc, err = connect(self)
+    if not httpc then
+        return nil, err
+    end
+
+    local body_in = {}
+
+    if type(key) == "string" then
+        key = safe_json_decode(key)
+    end
+
+    if type(key) == "table" then
+        for _,v in pairs(key) do
+            local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
+            table.insert(body_in, entry)
+        end
+        body_in = json_encode(body_in)
+    else
+        return nil, "key needs to be table or JSON formatted string, not "..type(key)
+    end
+
+    local res, err = _put_txn_decoded(httpc, key, body_in, opts)
+    httpc:set_keepalive()
+    if not res then
+        return nil, err
+    end
+
+    return json_encode(res), err
+end
+
+function _M.txn_multi(self, key, opts)
+    local httpc, err = connect(self)
+    if not httpc then
+        return nil, err
+    end
+
+    local body_in = {}
+
+    if type(key) == "string" then
+        key = safe_json_decode(key)
+    end
+
+    if type(key) == "table" then
+        for _,v in pairs(key) do
+            local entry = {KV={Verb=v.Verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
+            table.insert(body_in, entry)
+        end
+        body_in = json_encode(body_in)
+    else
+        return nil, "key needs to be table or JSON formatted string, not "..type(key)
+    end
+
+    local res, err = _put_txn(httpc, key, body_in, opts)
+    httpc:set_keepalive()
+    if not res then
+        return nil, err
+    end
+
+    return res, err
+end
+
 return _M
