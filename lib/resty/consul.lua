@@ -342,7 +342,7 @@ function _M.txn(self, verb, key, opts)
     if type(key) == "table" then
         for _,v in pairs(key) do
             local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
-            table.insert(body_in, entry)
+            tbl_insert(body_in, entry)
         end
         body_in = json_encode(body_in)
     else
@@ -374,7 +374,7 @@ function _M.txn_json(self, verb, key, opts)
     if type(key) == "table" then
         for _,v in pairs(key) do
             local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
-            table.insert(body_in, entry)
+            tbl_insert(body_in, entry)
         end
         body_in = json_encode(body_in)
     else
@@ -406,7 +406,7 @@ function _M.txn_decoded(self, verb, key, opts)
     if type(key) == "table" then
         for _,v in pairs(key) do
             local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
-            table.insert(body_in, entry)
+            tbl_insert(body_in, entry)
         end
         body_in = json_encode(body_in)
     else
@@ -438,7 +438,7 @@ function _M.txn_decoded_json(self, verb, key, opts)
     if type(key) == "table" then
         for _,v in pairs(key) do
             local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
-            table.insert(body_in, entry)
+            tbl_insert(body_in, entry)
         end
         body_in = json_encode(body_in)
     else
@@ -469,7 +469,7 @@ function _M.txn_multi(self, key, opts)
     if type(key) == "table" then
         for _,v in pairs(key) do
             local entry = {KV={Verb=v.Verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
-            table.insert(body_in, entry)
+            tbl_insert(body_in, entry)
         end
         body_in = json_encode(body_in)
     else
