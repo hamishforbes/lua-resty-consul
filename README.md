@@ -64,7 +64,7 @@ end
 ### /v1/txn
 
 Available in Consul 0.7 and later, this endpoint manages updates or fetches of multiple keys inside a single, atomic transaction.
-[Official docs](https://www.consul.io/docs/agent/http/kv.html#txn)
+You can find more info inside [official docs](https://www.consul.io/docs/agent/http/kv.html#txn).
 
 ```lua
 
@@ -176,16 +176,24 @@ Proxy method to [lua-resty-http](https://github.com/pintsized/lua-resty-http#get
 ### txn
 
 `syntax: res, err = consul:txn(verb, key_value, opts?)`
+
 `syntax: res, err = consul:txn_json(verb, key_value, opts?)`
+
 `syntax: res, err = consul:txn_decoded(verb, key_value, opts?)`
+
 `syntax: res, err = consul:txn_decoded_json(verb, key_value, opts?)`
 
 Performs a PUT request with provided [verb](https://www.consul.io/docs/agent/http/kv.html#Verb) and key_value inside JSON body. API Version and txn are automatically prepended.
 
 key_value must be JSON, required and optional keys for every verb (type of operations) can be found in this [table](https://www.consul.io/docs/agent/http/kv.html#Index)
 
-e.g. to `set` new values you would call `consul:txn('set', '[{"Value":"Value_1","Key":"Key_1"},{"Value":"Value_2","Key":"Key_2"}]')`,
-to `get` values you would call `consul:txn('get', '[{"Key":"Key_1"},{"Key":"Key_2"}]')`
+e.g. to `set` new values you would call 
+
+`consul:txn('set', '[{"Value":"Value_1","Key":"Key_1"},{"Value":"Value_2","Key":"Key_2"}]')`,
+
+to `get` values you would call 
+
+`consul:txn('get', '[{"Key":"Key_1"},{"Key":"Key_2"}]')`
 
 `opts` is hash of query string parameters to add to the URI.
 
