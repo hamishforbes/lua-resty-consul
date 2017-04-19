@@ -3,7 +3,7 @@ lua-resty-consul
 
 Library to interface with the consul HTTP API from ngx_lua
 
-#Table of Contents
+# Table of Contents
 
 * [Overview](#overview)
 * [Dependencies](#dependencies)
