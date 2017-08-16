@@ -13,7 +13,7 @@ local ngx_encode_args = ngx.encode_args
 local http = require('resty.http')
 
 local _M = {
-    _VERSION = '0.01',
+    _VERSION = '0.02',
 }
 
 local API_VERSION     = "v1"
