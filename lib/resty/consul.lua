@@ -109,7 +109,7 @@ local function _get(httpc, key, opts)
 
     local headers = res.headers
     local response = {}
-    if headers.content_type == 'application/json' then
+    if headers["Content-Type"] == 'application/json' then
 	    response = safe_json_decode(body)
     end
 
@@ -291,7 +291,7 @@ local function _put_txn(httpc, key, body_in, opts)
     httpc:set_keepalive()
 
     local headers = res.headers
-    if headers.content_type == 'application/json' then
+    if headers["Content-Type"] == 'application/json' then
         body = safe_json_decode(body)
     end
 
