@@ -183,9 +183,9 @@ Proxy method to [lua-resty-http](https://github.com/pintsized/lua-resty-http#get
 
 `syntax: res, err = consul:txn_decoded_json(verb, key_value, opts?)`
 
-Performs a PUT request with provided [verb](https://www.consul.io/docs/agent/http/kv.html#Verb) and key_value inside JSON body. API Version and txn are automatically prepended.
+Performs a PUT request with provided [verb](https://www.consul.io/api/txn.html#table-of-operations) and key_value inside JSON body. API Version and txn are automatically prepended.
 
-key_value must be JSON, required and optional keys for every verb (type of operations) can be found in this [table](https://www.consul.io/docs/agent/http/kv.html#Index)
+key_value must be JSON, required and optional keys for every verb (type of operations) can be found in this [table](https://www.consul.io/api/txn.html#table-of-operations)
 
 e.g. to `set` new values you would call 
 
