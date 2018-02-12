@@ -20,6 +20,7 @@ local API_VERSION     = "v1"
 local DEFAULT_HOST    = "127.0.0.1"
 local DEFAULT_PORT    = 8500
 local DEFAULT_TIMEOUT = 60*1000 -- 60s default timeout
+local DEFAULT_TOKEN   = nil
 
 local mt = { __index = _M }
 
@@ -29,7 +30,8 @@ function _M.new(_, opts)
         host            = opts.host            or DEFAULT_HOST,
         port            = opts.port            or DEFAULT_PORT,
         connect_timeout = opts.connect_timeout or DEFAULT_TIMEOUT,
-        read_timeout    = opts.read_timeout    or DEFAULT_TIMEOUT
+        read_timeout    = opts.read_timeout    or DEFAULT_TIMEOUT,
+        token           = opts.token           or DEFAULT_TOKEN
     }
     return setmetatable(self, mt)
 end
@@ -134,6 +136,15 @@ function _M.get(self, key, opts)
         httpc:set_timeout(self.read_timeout)
     end
 
+    if self.token ~= nil then
+       if opts and not opts.token then
+          opts.token = self.token
+       elseif not opts then
+          opts = {}
+          opts.token = self.token
+       end
+    end
+
     local res, lastcontact_or_err, knownleader, consul_index = _get(httpc, key, opts)
     httpc:set_keepalive()
     if not res then
@@ -186,6 +197,15 @@ function _M.put(self, key, value, opts)
     local httpc, err = connect(self)
     if not httpc then
         return nil, err
+    end
+
+    if self.token ~= nil then
+       if opts and not opts.token then
+          opts.token = self.token
+       elseif not opts then
+          opts = {}
+          opts.token = self.token
+       end
     end
 
     local uri = build_uri(key, opts)
@@ -349,6 +369,15 @@ function _M.txn(self, verb, key, opts)
         return nil, "key needs to be table or JSON formatted string, not "..type(key)
     end
 
+    if self.token ~= nil then
+       if opts and not opts.token then
+          opts.token = self.token
+       elseif not opts then
+          opts = {}
+          opts.token = self.token
+       end
+    end
+
     local res, err = _put_txn(httpc, key, body_in, opts)
     httpc:set_keepalive()
     if not res then
@@ -379,6 +408,15 @@ function _M.txn_json(self, verb, key, opts)
         body_in = json_encode(body_in)
     else
         return nil, "key needs to be table or JSON formatted string, not "..type(key)
+    end
+
+    if self.token ~= nil then
+       if opts and not opts.token then
+          opts.token = self.token
+       elseif not opts then
+          opts = {}
+          opts.token = self.token
+       end
     end
 
     local res, err = _put_txn(httpc, key, body_in, opts)
@@ -413,6 +451,15 @@ function _M.txn_decoded(self, verb, key, opts)
         return nil, "key needs to be table or JSON formatted string, not "..type(key)
     end
 
+    if self.token ~= nil then
+       if opts and not opts.token then
+          opts.token = self.token
+       elseif not opts then
+          opts = {}
+          opts.token = self.token
+       end
+    end
+
     local res, err = _put_txn_decoded(httpc, key, body_in, opts)
     httpc:set_keepalive()
     if not res then
@@ -445,6 +492,15 @@ function _M.txn_decoded_json(self, verb, key, opts)
         return nil, "key needs to be table or JSON formatted string, not "..type(key)
     end
 
+    if self.token ~= nil then
+       if opts and not opts.token then
+          opts.token = self.token
+       elseif not opts then
+          opts = {}
+          opts.token = self.token
+       end
+    end
+
     local res, err = _put_txn_decoded(httpc, key, body_in, opts)
     httpc:set_keepalive()
     if not res then
@@ -474,6 +530,15 @@ function _M.txn_multi(self, key, opts)
         body_in = json_encode(body_in)
     else
         return nil, "key needs to be table or JSON formatted string, not "..type(key)
+    end
+
+    if self.token ~= nil then
+       if opts and not opts.token then
+          opts.token = self.token
+       elseif not opts then
+          opts = {}
+          opts.token = self.token
+       end
     end
 
     local res, err = _put_txn(httpc, key, body_in, opts)

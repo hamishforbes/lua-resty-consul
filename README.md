@@ -112,6 +112,7 @@ Create a new consul client. `opts` is a table setting the following options:
  * `port` Defaults to 8500
  * `connect_timeout` Connection timeout in ms. Defaults to 60s
  * `read_timeout` Read timeout in ms. Defaults to 60s
+ * `token` Consul ACL token. Defaults to none
 
 ### get
 
