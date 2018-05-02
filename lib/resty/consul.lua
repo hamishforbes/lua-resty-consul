@@ -1,16 +1,18 @@
 local pcall = pcall
-local tostring = tostring
 local cjson = require('cjson')
 local json_decode = cjson.decode
 local json_encode = cjson.encode
-local tbl_concat = table.concat
-local tbl_insert = table.insert
 local ngx = ngx
+local ngx_null = ngx.null
 local ngx_log = ngx.log
 local ngx_ERR = ngx.ERR
+local ngx_WARN = ngx.WARN
 local ngx_DEBUG = ngx.DEBUG
-local ngx_encode_args = ngx.encode_args
+local ngx_decode_base64 = ngx.decode_base64
+local ngx_encode_base64 = ngx.encode_base64
 local http = require('resty.http')
+
+local DEBUG = false
 
 local _M = {
     _VERSION = '0.02',
@@ -24,14 +26,27 @@ local DEFAULT_TIMEOUT = 60*1000 -- 60s default timeout
 local mt = { __index = _M }
 
 
-function _M.new(_, opts)
+function _M.new(_, args)
     local self = {
-        host            = opts.host            or DEFAULT_HOST,
-        port            = opts.port            or DEFAULT_PORT,
-        connect_timeout = opts.connect_timeout or DEFAULT_TIMEOUT,
-        read_timeout    = opts.read_timeout    or DEFAULT_TIMEOUT
+        host            = args.host            or DEFAULT_HOST,
+        port            = args.port            or DEFAULT_PORT,
+        connect_timeout = args.connect_timeout or DEFAULT_TIMEOUT,
+        read_timeout    = args.read_timeout    or DEFAULT_TIMEOUT,
+        default_args    = args.default_args    or {},
+        ssl             = args.ssl             or false,
+        ssl_verify      = true,
+        sni_host        = args.sni_host,
     }
+    if args.ssl_verify ~= nil then
+        self.ssl_verify = args.ssl_verify
+    end
+    if self.port == 0 then self.port = nil end
+
     return setmetatable(self, mt)
+end
+
+function _M._debug(debug)
+    DEBUG = debug
 end
 
 
@@ -50,23 +65,6 @@ local function safe_json_decode(json_str)
 end
 
 
-local function build_uri(key, opts)
-    local uri = "/"..API_VERSION..key
-
-    if opts then
-        if opts.wait then
-            opts.wait = opts.wait.."s"
-        end
-
-        local params = ngx_encode_args(opts)
-        if #params > 0 then
-            uri = uri.."?"..params
-        end
-    end
-
-    return uri
-end
-
 local function connect(self)
     local httpc = http.new()
 
@@ -75,250 +73,133 @@ local function connect(self)
         httpc:set_timeout(connect_timeout)
     end
 
-    local ok, err = httpc:connect(self.host, self.port)
+    local ok, err
+    if self.port then
+        ok, err = httpc:connect(self.host, self.port)
+    else
+        ok, err = httpc:connect(self.host)
+    end
+
     if not ok then
         return nil, err
     end
+
+    if self.ssl then
+        if DEBUG then ngx_log(ngx_DEBUG, "[Consul ssl] Handshaking, host: ", self.sni_host, " verify: ", self.ssl_verify) end
+        local ok, err = httpc:ssl_handshake(nil, self.sni_host, self.ssl_verify)
+        if not ok then
+            return nil, err
+        end
+    end
+
     return httpc
 end
 
 
-local function _get(httpc, key, opts)
-    local uri = build_uri(key, opts)
-
-    local res, err = httpc:request({path = uri})
-    if not res then
-        return nil, err
-    end
-
-    local status = res.status
-    if not status then
-        return nil, "No status from consul"
-    elseif status ~= 200 then
-        if status == 404 then
-            return nil, "Key not found"
-        else
-            return nil, "Consul returned: HTTP "..status
-        end
-    end
-
-    local body, err = res:read_body()
-    if not body then
-        return nil, err
-    end
-
-    local headers = res.headers
-    local response = {}
-    if headers["Content-Type"] == 'application/json' then
-	    response = safe_json_decode(body)
-    end
-
-    return response, headers["X-Consul-Lastcontact"], headers["X-Consul-Knownleader"], headers["X-Consul-Index"]
-end
-
-
-function _M.get(self, key, opts)
+-- Generic request function
+local function _request(self, method, path, args, body)
     local httpc, err = connect(self)
     if not httpc then
         return nil, err
     end
 
-    if opts and (opts.wait or opts.index) then
+    args = args or {}
+
+    local uri = "/"..API_VERSION..path
+
+    for k, v in pairs(self.default_args) do
+        args[k] = args[k] or v
+    end
+
+    local headers = {
+        ["X-Consul-Token"] = args.token
+    }
+    args.token = nil -- remove token from query string
+
+    if not self.port then -- Connecting on unix socket, fake a Host header
+        headers["Host"] = "consul.rocks"
+    end
+
+    if args.wait or args.index then
         -- Blocking request, increase timeout
-        local timeout = 10 * 60 * 1000 -- Default timeout is 10m
-        if opts.wait then
-            timeout = opts.wait * 1000
+        -- https://www.consul.io/api/index.html#blocking-queries
+        local timeout = (5 * 60 * 1000) -- Default timeout is 5m
+        if args.wait then
+            timeout = (args.wait * 1000)
+            args.wait = args.wait.."s" -- Append 's' in query string
         end
-        httpc:set_timeout(timeout)
+        if DEBUG then ngx_log(ngx_DEBUG, "[Consul] Blocking query timeout: ", timeout + (timeout / 16) + self.read_timeout) end
+        httpc:set_timeout(timeout + (timeout / 16) + self.read_timeout)
     else
         httpc:set_timeout(self.read_timeout)
     end
 
-    local res, lastcontact_or_err, knownleader, consul_index = _get(httpc, key, opts)
-    httpc:set_keepalive()
-    if not res then
-        return nil, lastcontact_or_err
-    end
-
-    return res, {lastcontact_or_err or false, knownleader or false, consul_index or false}
-end
-
-
-function _M.get_decoded(self, key, opts)
-    local res, err = self:get(key, opts)
-    if not res then
-        return nil, err
-    end
-    for _,entry in ipairs(res) do
-        if type(entry.Value) == "string" then
-            local decoded = ngx.decode_base64(entry.Value)
-            if decoded ~= nil then
-                entry.Value = decoded
-            end
-        end
-    end
-    return res, err
-end
-
-
-function _M.get_json_decoded(self, key, opts)
-    local res, err = self:get_decoded(key, opts)
-    if not res then
-        return nil, err
-    end
-    for _,entry in ipairs(res) do
-        if entry.Value ~= nil then
-            local decoded = safe_json_decode(entry.Value)
-            if decoded ~= nil then
-                entry.Value = decoded
-            end
-        end
-    end
-    return res, err
-end
-
-
-function _M.put(self, key, value, opts)
-    if not opts then
-        opts = {}
-    end
-
-    local httpc, err = connect(self)
-    if not httpc then
-        return nil, err
-    end
-
-    local uri = build_uri(key, opts)
-
-    local body_in
-    if type(value) == "table" or type(value) == "boolean" then
-        body_in = json_encode(value)
+    if type(body) == "table" or type(body) == "boolean" then
+        body = json_encode(body)
     else
-        body_in = value
+        body = body
     end
 
-    local res, err = httpc:request({
-        method = "PUT",
-        path = uri,
-        body = body_in
-    })
+    local params = {
+        path       = uri,
+        headers    = headers,
+        method     = method,
+        query      = args,
+        body       = body,
+    }
+
+    local res, err = httpc:request(params)
     if not res then
-        return nil, err
-    end
-
-    if not res.status then
-        return nil, "No status from consul"
-    end
-
-    local body, err = res:read_body()
-    if not body then
-        return nil, err
-    end
-
-    httpc:set_keepalive()
-
-    -- If status is not 200 then body is most likely an error message
-    if res.status ~= 200 then
-        return nil, body
-    elseif body and #body > 0 then
-        return safe_json_decode(body)
-    else
-        return true
-    end
-end
-
-
-function _M.delete(self, key, recurse)
-    local httpc, err = connect(self)
-    if not httpc then
-        return nil, err
-    end
-
-    if recurse then
-        recurse = {recurse = true}
-    end
-    local uri = build_uri(key, recurse)
-
-    local res, err = httpc:request({
-        method = "DELETE",
-        path = uri,
-    })
-    if not res then
-        return nil, err
-    end
-
-    if not res.status then
-        return nil, "No status from consul"
-    end
-
-    local body, err = res:read_body()
-    if not body then
-        return nil, err
-    end
-
-    httpc:set_keepalive()
-
-    if res.status == 200 then
-        return true
-    end
-    -- DELETE seems to return 200 regardless, but just in case
-    return {status = res.status, body = body, headers = res.headers}, err
-end
-
-
-local function _put_txn(httpc, key, body_in, opts)
-    local uri = build_uri("/txn", opts)
-
-    local res, err = httpc:request({
-        method = "PUT",
-        path = uri,
-        body = body_in
-    })
-    if not res then
+        httpc:close()
         return nil, err
     end
 
     local status = res.status
     if not status then
+        httpc:close()
         return nil, "No status from consul"
     end
 
     local body, err = res:read_body()
     if not body then
+        httpc:close()
         return nil, err
     end
 
-    httpc:set_keepalive()
+    if DEBUG then
+        ngx_log(ngx_DEBUG, "[Consul] Status: ", status)
+        ngx_log(ngx_DEBUG, "[Consul] Headers:\n", require("cjson").encode(res.headers))
+        ngx_log(ngx_DEBUG, "[Consul] Body:\n", body)
+    end
 
     local headers = res.headers
     if headers["Content-Type"] == 'application/json' then
-        body = safe_json_decode(body)
+        res.body = safe_json_decode(body)
+    else
+        res.body = body
     end
 
-    if status ~= 200 then
-        if status == 409 then
-            return nil, json_encode(body.Errors)
-        else
-            return nil, "Consul returned: HTTP "..status
-        end
-    end
-
-    return body, err
+    httpc:set_keepalive()
+    return res
 end
 
 
-local function _put_txn_decoded(httpc, key, body_in, opts)
-    local res, err = _put_txn(httpc, key, body_in, opts)
-    httpc:set_keepalive()
+-- Parse Base64 encoded KV entries
+local function _request_decoded(self, method, path, args, body)
+    local res, err = _request(self, method, path, args, body)
     if not res then
         return nil, err
     end
 
-    for _,entry in ipairs(res.Results) do
-        if type(entry.KV.Value) == "string" then
-            local decoded = ngx.decode_base64(entry.KV.Value)
+    for _, entry in ipairs(res.body) do
+        if type(entry.Value) == "string" then
+            local decoded = ngx_decode_base64(entry.Value)
             if decoded ~= nil then
-                entry.KV.Value = decoded
+                entry.Value = decoded
+                if DEBUG then ngx_log(ngx_DEBUG, "[Consul] Decoded entry:\n", decoded) end
+            else
+                ngx_log(ngx_WARN, "[Consul] Could not decode Value")
+                if DEBUG then ngx_log(ngx_DEBUG, entry.Value) end
             end
         end
     end
@@ -327,162 +208,79 @@ local function _put_txn_decoded(httpc, key, body_in, opts)
 end
 
 
-function _M.txn(self, verb, key, opts)
-    local httpc, err = connect(self)
-    if not httpc then
-        return nil, err
-    end
+-- Method functions
+function _M.get(self, path, args)
+    return _request(self, "GET", path, args)
+end
 
-    local body_in = {}
 
-    if type(key) == "string" then
-        key = safe_json_decode(key)
-    end
+function _M.put(self, path, body, args) -- Only PUT has a body
+    return _request(self, "PUT", path, args, body)
+end
 
-    if type(key) == "table" then
-        for _,v in pairs(key) do
-            local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
-            tbl_insert(body_in, entry)
+
+function _M.delete(self, path, args)
+    return _request(self, "DELETE", path, args)
+end
+
+
+-- KV Helper functions
+-- Prepend /kv and automaticlaly base64 decode responses
+function _M.put_kv(self, key, value, args)
+    local path = "/kv/"..key
+    return _request(self, "PUT", path, args, value)
+end
+
+
+function _M.get_kv(self, key, args)
+    local path = "/kv/"..key
+    return _request_decoded(self, "GET", path, args)
+end
+
+
+function _M.delete_kv(self, key, args)
+    local path = "/kv/"..key
+    return _request(self, "DELETE", path, args)
+end
+
+
+-- TXN helper
+-- Takes a table of transactions (https://www.consul.io/api/txn.html)
+-- set Values will be automatically base64 encoded
+-- or a JSON string of transactions (no automatic encoding)
+-- Returns base64 decoded entries
+function _M.txn(self, payload, args)
+    if type(payload) == "table" then
+        for _, el in ipairs(payload) do
+            if el.KV and type(el.KV.Value) == "string" then
+                if DEBUG then ngx_log(ngx_DEBUG, "[Consul txn] Encoding value:\n", el.KV.Value) end
+                el.KV.Value = ngx_encode_base64(el.KV.Value)
+            end
         end
-        body_in = json_encode(body_in)
-    else
-        return nil, "key needs to be table or JSON formatted string, not "..type(key)
     end
 
-    local res, err = _put_txn(httpc, key, body_in, opts)
-    httpc:set_keepalive()
+    local res, err = _request(self, "PUT", "/txn", args, payload)
     if not res then
         return nil, err
+    end
+
+    if res.body.Results and res.body.Results ~= ngx_null then
+        for _, entry in ipairs(res.body.Results) do
+            if type(entry.KV.Value) == "string" then
+                local decoded = ngx_decode_base64(entry.KV.Value)
+                if decoded ~= nil then
+                    entry.KV.Value = decoded
+                    if DEBUG then ngx_log(ngx_DEBUG, "[Consul txn] Decoded entry:\n", decoded) end
+                else
+                    ngx_log(ngx_WARN, "[Consul txn] Could not decode Value")
+                    if DEBUG then ngx_log(ngx_DEBUG, entry.KV.Value) end
+                end
+            end
+        end
     end
 
     return res, err
 end
 
-
-function _M.txn_json(self, verb, key, opts)
-    local httpc, err = connect(self)
-    if not httpc then
-        return nil, err
-    end
-
-    local body_in = {}
-
-    if type(key) == "string" then
-        key = safe_json_decode(key)
-    end
-
-    if type(key) == "table" then
-        for _,v in pairs(key) do
-            local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
-            tbl_insert(body_in, entry)
-        end
-        body_in = json_encode(body_in)
-    else
-        return nil, "key needs to be table or JSON formatted string, not "..type(key)
-    end
-
-    local res, err = _put_txn(httpc, key, body_in, opts)
-    httpc:set_keepalive()
-    if not res then
-        return nil, err
-    end
-
-    return json_encode(res), err
-end
-
-
-function _M.txn_decoded(self, verb, key, opts)
-    local httpc, err = connect(self)
-    if not httpc then
-        return nil, err
-    end
-
-    local body_in = {}
-
-    if type(key) == "string" then
-        key = safe_json_decode(key)
-    end
-
-    if type(key) == "table" then
-        for _,v in pairs(key) do
-            local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
-            tbl_insert(body_in, entry)
-        end
-        body_in = json_encode(body_in)
-    else
-        return nil, "key needs to be table or JSON formatted string, not "..type(key)
-    end
-
-    local res, err = _put_txn_decoded(httpc, key, body_in, opts)
-    httpc:set_keepalive()
-    if not res then
-        return nil, err
-    end
-
-    return res, err
-end
-
-
-function _M.txn_decoded_json(self, verb, key, opts)
-    local httpc, err = connect(self)
-    if not httpc then
-        return nil, err
-    end
-
-    local body_in = {}
-
-    if type(key) == "string" then
-        key = safe_json_decode(key)
-    end
-
-    if type(key) == "table" then
-        for _,v in pairs(key) do
-            local entry = {KV={Verb=verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
-            tbl_insert(body_in, entry)
-        end
-        body_in = json_encode(body_in)
-    else
-        return nil, "key needs to be table or JSON formatted string, not "..type(key)
-    end
-
-    local res, err = _put_txn_decoded(httpc, key, body_in, opts)
-    httpc:set_keepalive()
-    if not res then
-        return nil, err
-    end
-
-    return json_encode(res), err
-end
-
-function _M.txn_multi(self, key, opts)
-    local httpc, err = connect(self)
-    if not httpc then
-        return nil, err
-    end
-
-    local body_in = {}
-
-    if type(key) == "string" then
-        key = safe_json_decode(key)
-    end
-
-    if type(key) == "table" then
-        for _,v in pairs(key) do
-            local entry = {KV={Verb=v.Verb, Key=v.Key, Value=ngx.encode_base64(v.Value), Flags=v.Flags, Index=v.Index, Session=v.Session}}
-            tbl_insert(body_in, entry)
-        end
-        body_in = json_encode(body_in)
-    else
-        return nil, "key needs to be table or JSON formatted string, not "..type(key)
-    end
-
-    local res, err = _put_txn(httpc, key, body_in, opts)
-    httpc:set_keepalive()
-    if not res then
-        return nil, err
-    end
-
-    return res, err
-end
 
 return _M
