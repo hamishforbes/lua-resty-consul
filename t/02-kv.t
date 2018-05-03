@@ -317,3 +317,37 @@ GET /a
 [error]
 --- response_body
 OK
+
+=== TEST 6: KV Get Request - decoded, broken response
+--- http_config eval
+"$::HttpConfig"
+
+--- config
+    location /a {
+        content_by_lua_block {
+            local consul = require("resty.consul")
+            c = consul:new({port = TEST_NGINX_PORT})
+
+            local res, err = c:get_key('foobar')
+            if not res then
+                ngx.say(err)
+                return
+            end
+
+            ngx.say(res.body)
+        }
+    }
+    location / {
+        content_by_lua_block {
+            opts.body = "not json"
+            opts.no_encode = true
+            opts.headers["Content-Type"] = "text/html"
+            mockConsul(opts)
+        }
+    }
+--- request
+GET /a
+--- no_error_log
+[error]
+--- response_body
+not json
