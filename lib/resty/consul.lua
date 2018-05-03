@@ -193,15 +193,17 @@ local function _request_decoded(self, method, path, args, body)
         return nil, err
     end
 
-    for _, entry in ipairs(res.body) do
-        if type(entry.Value) == "string" then
-            local decoded = ngx_decode_base64(entry.Value)
-            if decoded ~= nil then
-                entry.Value = decoded
-                if DEBUG then ngx_log(ngx_DEBUG, "[Consul] Decoded entry:\n", decoded) end
-            else
-                ngx_log(ngx_WARN, "[Consul] Could not decode Value")
-                if DEBUG then ngx_log(ngx_DEBUG, entry.Value) end
+    if res.body and type(res.body) == "table" then
+        for _, entry in ipairs(res.body) do
+            if type(entry.Value) == "string" then
+                local decoded = ngx_decode_base64(entry.Value)
+                if decoded ~= nil then
+                    entry.Value = decoded
+                    if DEBUG then ngx_log(ngx_DEBUG, "[Consul] Decoded entry:\n", decoded) end
+                else
+                    ngx_log(ngx_WARN, "[Consul] Could not decode Value")
+                    if DEBUG then ngx_log(ngx_DEBUG, entry.Value) end
+                end
             end
         end
     end
