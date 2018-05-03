@@ -37,9 +37,11 @@ function _M.new(_, args)
         ssl_verify      = true,
         sni_host        = args.sni_host,
     }
+
     if args.ssl_verify ~= nil then
         self.ssl_verify = args.ssl_verify
     end
+
     if self.port == 0 then self.port = nil end
 
     return setmetatable(self, mt)
@@ -210,35 +212,67 @@ end
 
 -- Method functions
 function _M.get(self, path, args)
+    if not path or type(path) ~= "string" then
+        return nil, "Path (string) required"
+    end
     return _request(self, "GET", path, args)
 end
 
 
 function _M.put(self, path, body, args) -- Only PUT has a body
+    if not path or not body or type(path) ~= "string" then
+        return nil, "Path (string) and body required"
+    end
     return _request(self, "PUT", path, args, body)
 end
 
 
 function _M.delete(self, path, args)
+    if not path or type(path) ~= "string" then
+        return nil, "Path (string) required"
+    end
     return _request(self, "DELETE", path, args)
 end
 
 
 -- KV Helper functions
 -- Prepend /kv and automaticlaly base64 decode responses
-function _M.put_kv(self, key, value, args)
+function _M.put_key(self, key, value, args)
+    if not key or not value or type(key) ~= "string" then
+        return nil, "Key (string) and value required"
+    end
     local path = "/kv/"..key
     return _request(self, "PUT", path, args, value)
 end
 
 
-function _M.get_kv(self, key, args)
+function _M.get_key(self, key, args)
+    if not key or type(key) ~= "string" then
+        return nil, "Key (string) required"
+    end
     local path = "/kv/"..key
     return _request_decoded(self, "GET", path, args)
 end
 
 
-function _M.delete_kv(self, key, args)
+function _M.list_keys(self, prefix, args)
+    prefix = prefix or ""
+    if type(prefix) ~= "string" then
+        return nil, "non-string prefix"
+    end
+
+    args = args or {}
+    args['keys'] = true -- ensure keys param is passed
+
+    local path = "/kv/"..prefix
+    return _request(self, "GET", path, args)
+end
+
+
+function _M.delete_key(self, key, args)
+    if not key or type(key) ~= "string" then
+        return nil, "Key (string) required"
+    end
     local path = "/kv/"..key
     return _request(self, "DELETE", path, args)
 end
@@ -250,6 +284,10 @@ end
 -- or a JSON string of transactions (no automatic encoding)
 -- Returns base64 decoded entries
 function _M.txn(self, payload, args)
+    if not payload then
+        return nil, "Payload required"
+    end
+
     if type(payload) == "table" then
         for _, el in ipairs(payload) do
             if el.KV and type(el.KV.Value) == "string" then
