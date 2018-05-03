@@ -155,7 +155,7 @@ Proxy method to [lua-resty-http](https://github.com/pintsized/lua-resty-http#get
 
 # Key Value Helpers
 
-These methods autoamtiaclly prepend `/v1/kv`, only the actual key should be passed.  
+These methods automatically prepend `/v1/kv`, only the actual key should be passed.  
 Base64 encoded values are automatically decoded.
 
 ### get_key
