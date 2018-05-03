@@ -64,7 +64,7 @@ __DATA__
             local consul = require("resty.consul")
             c = consul:new({port = TEST_NGINX_PORT})
 
-            local res, err = c:get_kv('foobar')
+            local res, err = c:get_key('foobar')
             if not res then
                 ngx.say(err)
                 return
@@ -111,7 +111,7 @@ test val
             local consul = require("resty.consul")
             c = consul:new({port = TEST_NGINX_PORT})
 
-            local res, err = c:put_kv('foobar', { newval = baz })
+            local res, err = c:put_key('foobar', { newval = baz })
             if not res then
                 ngx.say(err)
                 return
@@ -153,7 +153,7 @@ PUT
             local consul = require("resty.consul")
             c = consul:new({port = TEST_NGINX_PORT})
 
-            local res, err = c:delete_kv('foobar', { recurse = true })
+            local res, err = c:delete_key('foobar', { recurse = true })
             if not res then
                 ngx.say(err)
                 return
@@ -187,3 +187,133 @@ true
 DELETE
 /v1/kv/foobar
 recurse
+
+=== TEST 4: KV list keys Request
+--- http_config eval
+"$::HttpConfig"
+
+--- config
+    location /a {
+        content_by_lua_block {
+            local consul = require("resty.consul")
+            c = consul:new({port = TEST_NGINX_PORT})
+
+            local res, err = c:list_keys()
+            if not res then
+                ngx.say(err)
+                return
+            end
+
+            ngx.say(res.body[3])
+            ngx.say(res.status)
+            ngx.say(res.headers["X-Consul-Index"])
+            ngx.say(res.headers["X-Args"])
+        }
+    }
+    location / {
+        content_by_lua_block {
+            opts.body = {
+                "key1",
+                "key2",
+                "key1/nested"
+            }
+            opts.headers["X-Consul-Index"] = 2
+            mockConsul(opts)
+        }
+    }
+--- request
+GET /a
+--- no_error_log
+[error]
+--- response_body
+key1/nested
+200
+2
+keys
+
+=== TEST 4: KV list keys Request - additional args
+--- http_config eval
+"$::HttpConfig"
+
+--- config
+    location /a {
+        content_by_lua_block {
+            local consul = require("resty.consul")
+            c = consul:new({port = TEST_NGINX_PORT})
+
+            local res, err = c:list_keys('key1', {dc = "foo1" })
+            if not res then
+                ngx.say(err)
+                return
+            end
+
+            ngx.say(res.body[2])
+            ngx.say(res.status)
+            ngx.say(res.headers["X-Consul-Index"])
+            ngx.say(res.headers["X-URI"])
+            ngx.say(res.headers["X-Args"]:find("keys", 1, true) ~= nil)
+            ngx.say(res.headers["X-Args"]:find("dc=foo1", 1, true) ~= nil)
+        }
+    }
+    location / {
+        content_by_lua_block {
+            opts.body = {
+                "key1",
+                "key1/nested"
+            }
+            opts.headers["X-Consul-Index"] = 2
+            mockConsul(opts)
+        }
+    }
+--- request
+GET /a
+--- no_error_log
+[error]
+--- response_body
+key1/nested
+200
+2
+/v1/kv/key1
+true
+true
+
+=== TEST 5: KV missing params
+--- http_config eval
+"$::HttpConfig"
+--- config
+    location /a {
+        content_by_lua_block {
+            local consul = require("resty.consul")
+            c = consul:new({port = TEST_NGINX_PORT})
+
+            local res, err = c:get_key()
+            assert(res == nil, "get with no key")
+            local res, err = c:get_key({})
+            assert(res == nil, "get with non-string key")
+
+            local res, err = c:put_key()
+            assert(res == nil, "put with no key")
+            local res, err = c:put_key('foo')
+            assert(res == nil, "put with only key, no value")
+            local res, err = c:put_key({})
+            assert(res == nil, "put with non-string key")
+
+            local res, err = c:delete_key()
+            assert(res == nil, "delete with no key")
+            local res, err = c:delete_key({})
+            assert(res == nil, "delete with non-string key")
+
+
+            local res, err = c:list_keys({})
+            assert(res == nil, "list with non-string prefix")
+
+            ngx.say("OK")
+
+        }
+    }
+--- request
+GET /a
+--- no_error_log
+[error]
+--- response_body
+OK

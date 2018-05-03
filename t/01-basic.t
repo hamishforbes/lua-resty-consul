@@ -355,3 +355,40 @@ GET /a
 Blocking query timeout: 206.25
 --- response_body
 timeout
+
+=== TEST 7: Missing params
+--- http_config eval
+"$::HttpConfig"
+--- config
+    location /a {
+        content_by_lua_block {
+            local consul = require("resty.consul")
+            c = consul:new({port = TEST_NGINX_PORT})
+
+            local res, err = c:get()
+            assert(res == nil, "get with no path")
+            local res, err = c:get({})
+            assert(res == nil, "get with non-string path")
+
+            local res, err = c:put()
+            assert(res == nil, "put with no path")
+            local res, err = c:put('foo')
+            assert(res == nil, "put with only path, no body")
+            local res, err = c:put({})
+            assert(res == nil, "put with non-string path")
+
+            local res, err = c:delete()
+            assert(res == nil, "delete with no path")
+            local res, err = c:delete({})
+            assert(res == nil, "delete with non-string path")
+
+            ngx.say("OK")
+
+        }
+    }
+--- request
+GET /a
+--- no_error_log
+[error]
+--- response_body
+OK
