@@ -7,100 +7,95 @@ Library to interface with the consul HTTP API from ngx_lua
 
 * [Overview](#overview)
 * [Dependencies](#dependencies)
-* [Methods](#methods)
+* [Basic Methods](#basic_methods)
     * [new](#new)
     * [get](#get)
-    * [get_decoded](#get_decoded)
-    * [get_json_decoded](#get_json_decoded)
     * [put](#put)
     * [delete](#delete)
     * [get_client_body_reader](#get_client_body_reader)
-    * [txn](#txn)
+* [Key Value helpers](#key_value_helpers)
+    * [get_key](#get_key)
+    * [put_key](#put_key)
+    * [delete_key](#delete_key)
+    * [list_keys](#list_keys)
+* [Transaction helpter](#transaction_helper)
 
 # Overview
+
+Methods all return a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response object.  
+The response body has been read and set to `res.body`, JSON decoded if the response has a `Content-Type` header of `Application/JSON`.
+
+All response headers are available at `res.headers`.
+
+The ACL Token parameter is always sent as the `X-Consul-Token` header rather than being included in the query string.
+
+If `wait` or `index` arguments are provided the request read timeout is extended appropriately.  
+`wait` must be passed as a number of seconds, do not include `s` or any other unit string.
 
 ```lua
 
 local resty_consul = require('resty.consul')
 local consul = resty_consul:new({
-        host = '10.10.10.10',
-        port = 8500
+        host            = "127.0.0.1",
+        port            = 8500,
+        connect_timeout = (60*1000), -- 60s
+        read_timeout    = (60*1000), -- 60s
+        default_args    = {
+            token = "my-default-token"
+        },
+        ssl             = false,
+        ssl_verify      = true,
+        sni_host        = nil,
     })
 
-local ok, err = consul:put('/kv/foobar', 'My key value!')
-if not ok then
-    ngx.log(ngx.ERR, err)
-end
-
-local ok, err = consul:put('/kv/some_json', { msg = 'This will be json encoded'})
-if not ok then
-    ngx.log(ngx.ERR, err)
-end
-
-local res, err = consul:get('/kv/foobar')
+local res, err = consul:get('/agent/services')
 if not res then
     ngx.log(ngx.ERR, err)
+    return
 end
-ngx.say(res[1].Value) -- Prints "TXkga2V5IHZhbHVlIQo="
 
-local res, err = consul:get_decoded('/kv/foobar')
+ngx.print(res.status) -- 200
+local services = res.body -- JSON decoded response
+
+
+local res, err = consul:put('/agent/service/register', my_service_definition, { token = "override-token" })
 if not res then
     ngx.log(ngx.ERR, err)
+    return
 end
-ngx.say(res[1].Value) -- Prints "My key value!"
 
-local res, err = consul:get_json_decoded('/kv/some_json')
+ngx.print(res.status) -- 200
+ngx.print(res.headers["X-Consul-Knownleader"]) -- "true"
+local service_register_response = res.body -- JSON decoded response
+
+
+local res, err = consul:list_keys() -- Get all keys
 if not res then
     ngx.log(ngx.ERR, err)
-end
-if type(res[1].Value) == 'table' then
-    ngx.say(res[1].Value.msg) -- Prints "This will be json encoded"
-else
-    ngx.log(ngx.ERR, "Failed to decode value :(")
+    return
 end
 
+local keys = {}
+if res.status == 200 then
+    keys = res.body
+end
+
+for _, key in ipairs(keys) do
+    local res, err = consul:get_key(key)
+    if not res then
+        ngx.log(ngx.ERR, err)
+        return
+    end
+
+    ngx.print(res.body[1].Value) -- Key value after base64 decoding
+end
 ```
-
-### /v1/txn
-
-Available in Consul 0.7 and later, this endpoint manages updates or fetches of multiple keys inside a single, atomic transaction.
-You can find more info inside [official docs](https://www.consul.io/docs/agent/http/kv.html#txn).
-
-```lua
-
-ngx.req.read_body()
-local key_value = ngx.req.get_body_data()
-local res, err = consul:txn_decoded_json('set', key_value)
-if not ok then
-    ngx.log(ngx.ERR, err)
-    ngx.status = ngx.HTTP_INTERNAL_SERVER_ERROR
-    ngx.say(err)
-else
-    ngx.status = ngx.HTTP_OK
-    ngx.say(res)
-end
-
-ngx.req.read_body()
-local verb_key_value = ngx.req.get_body_data()
-local res, err = consul:txn_multi(verb_key_value)
-if not ok then
-    ngx.log(ngx.ERR, err)
-    ngx.status = ngx.HTTP_INTERNAL_SERVER_ERROR
-    ngx.say(err)
-else
-    ngx.status = ngx.HTTP_OK
-    ngx.say(res)
-end
-
-
-```
-
 
 # Dependencies
 
  * [lua-resty-http](https://github.com/pintsized/lua-resty-http)
 
-# Methods
+# Basic Methods
 
 ### new
 
@@ -109,108 +104,151 @@ end
 Create a new consul client. `opts` is a table setting the following options:
 
  * `host` Defaults to 127.0.0.1
- * `port` Defaults to 8500
+ * `port` Defaults to 8500. Set to `0` if using a unix socket as `host`.
  * `connect_timeout` Connection timeout in ms. Defaults to 60s
  * `read_timeout` Read timeout in ms. Defaults to 60s
+ * `default_args` Table of query string arguments to send with all requests (e.g. `token`) Defaults to empty
+ * `ssl` Boolean, enable HTTPS requests. Default to `false`.
+ * `ssl_verify` Boolean, verify SSL certificates. Defaults to `true`      = true,
+ * `sni_host` Hostname to use when verifying SSL certs.
 
 ### get
 
-`syntax: res, headers = consul:get(key, opts?)`
+`syntax: res, err = consul:get(path, args?)`
 
-Performs a GET request against the provided key. API Version is automatically prepended.
+Performs a GET request to the provided path. API Version is automatically prepended.
 
-e.g. to get the value of a key at http://my.consul.server/v1/kv/foobar you would call `consul:get('/kv/foobar')`
+`args` is a table of query string parameters to add to the URI.
 
-`opts` is hash of query string parameters to add to the URI.
-
-The `wait` query string param is a special case, it must be passed in as an number not as a string with 's' appended.
-
-Returns a table representing the response from Consul and a second table of the Consul specific headers `X-Consul-Lastcontact`, `X-Consul-KnownLeader` and `X-Consul-Index`.
-
+Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response object.  
 On error returns `nil` and an error message.
 
-### get_decoded
-
-`syntax: res, headers = consul:get_decoded(key, opts?)`
-
-Wrapper on the `get` method, but performs base64 decode on the `value` field in the Consul response
-
-### get_json_decoded
-
-`syntax: res, headers = consul:get_json_decoded(key, opts?)`
-
-Wrapper on the `get` method, but performs base64 decode on the `value` field in the Consul response and then attempts to parse the value as json.
 
 ### put
 
-`syntax: res, err = consul:put(key, value, opts?)`
+`syntax: res, err = consul:put(path, body, args?)`
 
-Performs a PUT request against the provided key with provided value. API Version is automatically prepended.
+Performs a PUT request to the provided path. API Version is automatically prepended.
 
-`opts` is hash of query string parameters to add to the URI.
+`args` is table of query string parameters to add to the URI.
 
-If `value` is a table or boolean value it is automatically json encoded before being sent.
-
+If `body` is a table or boolean value it is automatically json encoded before being sent.   
 Otherwise anything that [lua-resty-http](https://github.com/pintsized/lua-resty-http) accepts as a body input is valid.
 
-On a 200 response returns the response body if there is one or a boolean true.
-
-On a non-200 response returns nil and the response body.
+Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response object.  
+On error returns `nil` and an error message.
 
 ### delete
 
-`syntax: ok, err = consul:delete(key, value, recurse?)`
+`syntax: res, err = consul:delete(path, args?)`
 
-Performs a DELETE request against the provided key. 
+Performs a GET request to the provided path. API Version is automatically prepended.
 
-`recurse` defaults to false.
+`args` is a table of query string parameters to add to the URI.
 
-Returns a boolean true if the response is 200.
-
-Otherwise a table containing `status`, `body` and `headers` as well as the error from [lua-resty-http](https://github.com/pintsized/lua-resty-http)
+Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response object.  
+On error returns `nil` and an error message.
 
 ### get_client_body_reader
 
 Proxy method to [lua-resty-http](https://github.com/pintsized/lua-resty-http#get_client_body_reader)
 
+# Key Value Helpers
+
+These methods automatically prepend `/v1/kv`, only the actual key should be passed.  
+Base64 encoded values are automatically decoded.
+
+### get_key
+
+`syntax: res, err = consul:get_key(key, args?)`
+
+Retrieve a Consul KV key. Values are Base64 decoded.
+
+`args` is a table of query string parameters to add to the URI.
+
+Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response object.  
+On error returns `nil` and an error message.
+
+### put_key
+
+`syntax: res, err = consul:put_key(key, value, args?)`
+
+Create or update a KV key.
+
+`args` is table of query string parameters to add to the URI.
+
+If `value` is a table or boolean value it is automatically json encoded before being sent.   
+Otherwise anything that [lua-resty-http](https://github.com/pintsized/lua-resty-http) accepts as a body input is valid.
+
+Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response object.  
+On error returns `nil` and an error message.
+
+### delete
+
+`syntax: res, err = consul:delete_key(key, args?)`
+
+Delete a KV entry.
+
+`args` is a table of query string parameters to add to the URI.
+
+Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response object.  
+On error returns `nil` and an error message.
+
+
+### list_keys
+
+`syntax: res, err = consul:list_keys(prefix?, args?)`
+
+Retrieve all the keys in the KV strore. Optionally within a `prefix`.
+
+`args` is a table of query string parameters to add to the URI.   
+`keys` is always set as a query string parameter with this method
+
+Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response object.  
+On error returns `nil` and an error message.
+
+
+# Transaction helpter
+
 ### txn
 
-`syntax: res, err = consul:txn(verb, key_value, opts?)`
+`syntax: res, err = consul:txn(payload, args?)`
 
-`syntax: res, err = consul:txn_json(verb, key_value, opts?)`
+Performs a `PUT` request  to the `/v1/txn` API endpoint with the provided payload.
 
-`syntax: res, err = consul:txn_decoded(verb, key_value, opts?)`
+`payload` can be provided as a Lua table, in which case `Value` keys will be automatically base64 encoded.  
+Otherwise anything that [lua-resty-http](https://github.com/pintsized/lua-resty-http) accepts as a body input is valid.
 
-`syntax: res, err = consul:txn_decoded_json(verb, key_value, opts?)`
-
-Performs a PUT request with provided [verb](https://www.consul.io/api/txn.html#table-of-operations) and key_value inside JSON body. API Version and txn are automatically prepended.
-
-key_value must be JSON, required and optional keys for every verb (type of operations) can be found in this [table](https://www.consul.io/api/txn.html#table-of-operations)
-
-e.g. to `set` new values you would call 
-
-`consul:txn('set', '[{"Value":"Value_1","Key":"Key_1"},{"Value":"Value_2","Key":"Key_2"}]')`,
-
-to `get` values you would call 
-
-`consul:txn('get', '[{"Key":"Key_1"},{"Key":"Key_2"}]')`
-
-`opts` is hash of query string parameters to add to the URI.
-
-All four methods create request the same way, response is different:
-* txn return Lua table
-* txn_json returns JSON string
-* txn_decoded returns Lua table with decoded Value
-* txn_decoded_json returns JSON string with decoded Value
-
+Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response object.  
 On error returns `nil` and an error message.
 
-`syntax: res, err = consul:txn_multi(verb_key_value, opts?)`
+KV values in the response body are automatically base64 decoded.
 
-Performs a PUT request with provided verb_key_value inside JSON body. You can execute multiple operations.
+```lua
+local txn_payload = {
+    {
+        KV = {
+            Verb   = "set",
+            Key    = "foo",
+            Value  = "bar",
+        }
+    },
+    {
+        KV = {
+            Verb   = "get",
+            Key    = "foobar",
+        }
+    }
+}
 
-e.g. to run `set` and `get` inside one request one would call `consul:txn_multi('[{"Verb":"set","Value":"Value_1","Key":"Key_1"},{"Verb":"get","Key":"Key_2"}]')`
+local consul = resty_consul:new()
 
-Returns Lua table with Base64 encoded Value.
+local res, err = consul:txn(txn_payload)
+if not res then
+    ngx.say(err)
+    return
+end
 
-On error returns `nil` and an error message.
+ngx.say(res.body.Results[2].KV.Value) -- "bar"
+```
+
