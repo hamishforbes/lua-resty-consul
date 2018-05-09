@@ -208,7 +208,7 @@ Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response
 On error returns `nil` and an error message.
 
 
-# Transaction helpter
+# Transaction helper
 
 ### txn
 
