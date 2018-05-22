@@ -15,7 +15,7 @@ local http = require('resty.http')
 local DEBUG = false
 
 local _M = {
-    _VERSION = '0.02',
+    _VERSION = '0.3.0',
 }
 
 local API_VERSION     = "v1"
