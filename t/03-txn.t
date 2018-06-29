@@ -376,3 +376,134 @@ GET /a
 --- response_body
 Bar
 200
+
+=== TEST 5: TXN Request, table input, types
+--- http_config eval
+"$::HttpConfig"
+
+--- config
+    location /a {
+        content_by_lua_block {
+            local consul = require("resty.consul")
+            c = consul:new({port = TEST_NGINX_PORT})
+
+
+            local txn_payload = {
+                {
+                    KV = {
+                        Verb   = "set",
+                        Key    = "foobar",
+                        Value  = 1234,
+                        Flags  = nil,
+                        Index  = nil,
+                        Session = nil
+                    }
+                },
+                {
+                    KV = {
+                        Verb   = "set",
+                        Key    = "foobar2",
+                        Value  = true,
+                        Flags  = nil,
+                        Index  = nil,
+                        Session = nil
+                    }
+                },
+                {
+                    KV = {
+                        Verb   = "get",
+                        Key    = "foobar",
+                    }
+                },
+                {
+                    KV = {
+                        Verb   = "get",
+                        Key    = "foobar2",
+                    }
+                }
+            }
+
+            local res, err = c:txn(txn_payload)
+            if not res then
+                ngx.say(err)
+                return
+            end
+
+            if res.status ~= 200 then
+                ngx.say(ngx.DEBUG, require("cjson").encode(res.body) )
+                return
+            end
+
+            ngx.say(res.status)
+            ngx.say(type(res.body.Results[3].KV.Value))
+            ngx.say(res.body.Results[3].KV.Value)
+            ngx.say(type(res.body.Results[4].KV.Value))
+            ngx.say(res.body.Results[4].KV.Value)
+        }
+    }
+    location / {
+        content_by_lua_block {
+            ngx.req.read_body()
+            local body = ngx.req.get_body_data()
+            body = require("cjson").decode(body)
+
+
+            opts.body = {
+                Results = {
+                    {
+                        KV = {
+                            LockIndex = 0,
+                            Key = "foobar",
+                            Flags =  0,
+                            Value = ngx.null,
+                            CreateIndex = 283839,
+                            ModifyIndex = 283839
+                        }
+                    },
+                    {
+                        KV = {
+                            LockIndex = 0,
+                            Key = "foobar2",
+                            Flags =  0,
+                            Value = ngx.null,
+                            CreateIndex = 283839,
+                            ModifyIndex = 283839
+                        }
+                    },
+                    {
+                        KV = {
+                            LockIndex = 0,
+                            Key = "foobar",
+                            Flags = 0,
+                            Value = "MTIzNA==",
+                            CreateIndex = 283839,
+                            ModifyIndex = 283839
+                        }
+                    },
+                    {
+                        KV = {
+                            LockIndex = 0,
+                            Key = "foobar",
+                            Flags = 0,
+                            Value = "dHJ1ZQ==",
+                            CreateIndex = 283839,
+                            ModifyIndex = 283839
+                        }
+                    }
+                },
+                Errors = ngx.null
+            }
+            opts.headers["X-Consul-Index"] = 283839
+            mockConsul(opts)
+        }
+    }
+--- request
+GET /a
+--- no_error_log
+[error]
+--- response_body
+200
+string
+1234
+string
+true

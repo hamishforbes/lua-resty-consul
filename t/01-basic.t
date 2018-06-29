@@ -64,6 +64,8 @@ __DATA__
         content_by_lua_block {
             local consul = require("resty.consul")
             ngx.say("OK")
+            local c = consul:new()
+            ngx.say("OK2")
         }
     }
 --- request
@@ -72,6 +74,7 @@ GET /a
 [error]
 --- response_body
 OK
+OK2
 
 === TEST 2: Get Request
 --- http_config eval

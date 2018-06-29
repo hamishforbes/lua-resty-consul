@@ -351,3 +351,50 @@ GET /a
 [error]
 --- response_body
 not json
+
+
+=== TEST 7: KV PUT Request - types
+--- http_config eval
+"$::HttpConfig"
+--- config
+    location /a {
+        content_by_lua_block {
+            local consul = require("resty.consul")
+            c = consul:new({port = TEST_NGINX_PORT})
+
+            local res, err = c:put_key('foobar', 1234)
+            if not res then
+                ngx.say(err)
+                return
+            end
+            ngx.say(res.status)
+            ngx.say(res.body)
+
+            local res, err = c:put_key('foobar', true)
+            if not res then
+                ngx.say(err)
+                return
+            end
+            ngx.say(res.status)
+            ngx.say(res.body)
+        }
+    }
+    location / {
+        content_by_lua_block {
+            ngx.req.read_body()
+            opts.body = ngx.req.get_body_data()
+            opts.headers["X-Consul-Index"] = nil
+            opts.headers["X-Consul-Knownleader"] = nil
+            opts.headers["X-Consul-Lastcontact"] = nil
+            mockConsul(opts)
+        }
+    }
+--- request
+GET /a
+--- no_error_log
+[error]
+--- response_body
+200
+1234
+200
+true
