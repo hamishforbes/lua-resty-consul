@@ -27,6 +27,7 @@ local mt = { __index = _M }
 
 
 function _M.new(_, args)
+    args = args or {}
     local self = {
         host            = args.host            or DEFAULT_HOST,
         port            = args.port            or DEFAULT_PORT,
@@ -136,18 +137,20 @@ local function _request(self, method, path, args, body)
         httpc:set_timeout(self.read_timeout)
     end
 
-    if type(body) == "table" or type(body) == "boolean" then
+    local body_type = type(body)
+
+    if body_type == "table" then
         body = json_encode(body)
-    else
-        body = body
+    elseif body_type == "number" or body_type == "boolean" then
+        body = tostring(body)
     end
 
     local params = {
-        path       = uri,
-        headers    = headers,
-        method     = method,
-        query      = args,
-        body       = body,
+        path    = uri,
+        headers = headers,
+        method  = method,
+        query   = args,
+        body    = body,
     }
 
     local res, err = httpc:request(params)
@@ -162,8 +165,8 @@ local function _request(self, method, path, args, body)
         return nil, "No status from consul"
     end
 
-    local body, err = res:read_body()
-    if not body then
+    local res_body, err = res:read_body()
+    if not res_body then
         httpc:close()
         return nil, err
     end
@@ -171,17 +174,18 @@ local function _request(self, method, path, args, body)
     if DEBUG then
         ngx_log(ngx_DEBUG, "[Consul] Status: ", status)
         ngx_log(ngx_DEBUG, "[Consul] Headers:\n", require("cjson").encode(res.headers))
-        ngx_log(ngx_DEBUG, "[Consul] Body:\n", body)
+        ngx_log(ngx_DEBUG, "[Consul] Body:\n", res_body)
     end
 
     local headers = res.headers
     if headers["Content-Type"] == 'application/json' then
-        res.body = safe_json_decode(body)
+        res.body = safe_json_decode(res_body)
     else
-        res.body = body
+        res.body = res_body
     end
 
     httpc:set_keepalive()
+
     return res
 end
 
@@ -292,9 +296,17 @@ function _M.txn(self, payload, args)
 
     if type(payload) == "table" then
         for _, el in ipairs(payload) do
-            if el.KV and type(el.KV.Value) == "string" then
-                if DEBUG then ngx_log(ngx_DEBUG, "[Consul txn] Encoding value:\n", el.KV.Value) end
-                el.KV.Value = ngx_encode_base64(el.KV.Value)
+            if el.KV then
+                local val_type = type(el.KV.Value)
+
+                if val_type  == "string" or val_type == "number" or val_type == "boolean" then
+                    if val_type == "boolean" then
+                        el.KV.Value = tostring(el.KV.Value)
+                    end
+
+                    if DEBUG then ngx_log(ngx_DEBUG, "[Consul txn] Encoding value:\n", el.KV.Value) end
+                    el.KV.Value = ngx_encode_base64(el.KV.Value)
+                end
             end
         end
     end
