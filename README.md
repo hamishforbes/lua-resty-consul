@@ -18,7 +18,7 @@ Library to interface with the consul HTTP API from ngx_lua
     * [put_key](#put_key)
     * [delete_key](#delete_key)
     * [list_keys](#list_keys)
-* [Transaction helper](#transaction_helper)
+* [Transaction Helper](#transaction_helper)
 
 # Overview
 
@@ -208,7 +208,7 @@ Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response
 On error returns `nil` and an error message.
 
 
-# Transaction helper
+# Transaction Helper
 
 ### txn
 
