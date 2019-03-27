@@ -7,18 +7,18 @@ Library to interface with the consul HTTP API from ngx_lua
 
 * [Overview](#overview)
 * [Dependencies](#dependencies)
-* [Basic Methods](#basic_methods)
+* [Basic Methods](#basic-methods)
     * [new](#new)
     * [get](#get)
     * [put](#put)
     * [delete](#delete)
     * [get_client_body_reader](#get_client_body_reader)
-* [Key Value helpers](#key_value_helpers)
+* [Key Value helpers](#key-value-helpers)
     * [get_key](#get_key)
     * [put_key](#put_key)
     * [delete_key](#delete_key)
     * [list_keys](#list_keys)
-* [Transaction helpter](#transaction_helper)
+* [Transaction Helper](#transaction-helper)
 
 # Overview
 
@@ -208,7 +208,7 @@ Returns a [lua-resty-http](https://github.com/pintsized/lua-resty-http) response
 On error returns `nil` and an error message.
 
 
-# Transaction helper
+# Transaction Helper
 
 ### txn
 
