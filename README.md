@@ -18,7 +18,7 @@ Library to interface with the consul HTTP API from ngx_lua
     * [put_key](#put_key)
     * [delete_key](#delete_key)
     * [list_keys](#list_keys)
-* [Transaction helpter](#transaction_helper)
+* [Transaction helper](#transaction_helper)
 
 # Overview
 
