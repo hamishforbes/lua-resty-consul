@@ -76,23 +76,16 @@ local function connect(self)
         httpc:set_timeout(connect_timeout)
     end
 
-    local ok, err
-    if self.port then
-        ok, err = httpc:connect(self.host, self.port)
-    else
-        ok, err = httpc:connect(self.host)
-    end
+    local ok, err = httpc:connect({
+        scheme = self.ssl and 'https' or 'http',
+        host = self.host,
+        port = self.port,
+        ssl_verify = self.ssl_verify,
+        ssl_server_name = self.sni_host
+    })
 
     if not ok then
         return nil, err
-    end
-
-    if self.ssl then
-        if DEBUG then ngx_log(ngx_DEBUG, "[Consul ssl] Handshaking, host: ", self.sni_host, " verify: ", self.ssl_verify) end
-        local ok, err = httpc:ssl_handshake(nil, self.sni_host, self.ssl_verify)
-        if not ok then
-            return nil, err
-        end
     end
 
     return httpc
