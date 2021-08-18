@@ -1,0 +1,8 @@
+{
+  "signing": {
+    "default": {
+      "expiry": "87600h",
+      "usages": ["signing", "key encipherment", "server auth", "client auth"]
+    }
+  }
+}

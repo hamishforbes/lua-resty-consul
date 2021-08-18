@@ -10,9 +10,9 @@ $ENV{TEST_NGINX_SOCKET_DIR} ||= $ENV{TEST_NGINX_HTML_DIR};
 
 our $HttpConfig = qq{
     lua_package_path "$pwd/lib/?.lua;;";
-    lua_ssl_trusted_certificate "../html/rootca.pem";
-    ssl_certificate "../html/example.com.crt";
-    ssl_certificate_key "../html/example.com.key";
+    lua_ssl_trusted_certificate "../html/test-ca.pem";
+    ssl_certificate "../html/test.pem";
+    ssl_certificate_key "../html/test-key.pem";
 
     init_by_lua_block {
         require("resty.consul")._debug(true)
@@ -33,9 +33,9 @@ sub read_file {
     $cert;
 }
 
-our $RootCACert = read_file("t/cert/rootCA.pem");
-our $ExampleCert = read_file("t/cert/example.com.crt");
-our $ExampleKey = read_file("t/cert/example.com.key");
+our $RootCACert = read_file("t/cert/test-ca.pem");
+our $TestCert = read_file("t/cert/test.pem");
+our $TestKey = read_file("t/cert/test-key.pem");
 
 no_long_string();
 no_root_location();
@@ -71,12 +71,12 @@ __DATA__
         }
     }
 --- user_files eval
-">>> rootca.pem
+">>> test-ca.pem
 $::RootCACert
->>> example.com.key
-$::ExampleKey
->>> example.com.crt
-$::ExampleCert"
+>>> test-key.pem
+$::TestKey
+>>> test.pem
+$::TestCert"
 --- request
 GET /a
 --- no_error_log
@@ -113,12 +113,12 @@ HTTPS OK
         }
     }
 --- user_files eval
-">>> rootca.pem
+">>> test-ca.pem
 $::RootCACert
->>> example.com.key
-$::ExampleKey
->>> example.com.crt
-$::ExampleCert"
+>>> test-key.pem
+$::TestKey
+>>> test.pem
+$::TestCert"
 --- request
 GET /a
 --- no_error_log

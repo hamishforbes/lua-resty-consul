@@ -1,0 +1,16 @@
+{
+    "CN": "ca.test",
+    "hosts": [
+        "ca.local.test"
+    ],
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "UK",
+            "L": "London"
+        }
+    ]
+}
