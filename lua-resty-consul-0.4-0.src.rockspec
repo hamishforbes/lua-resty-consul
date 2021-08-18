@@ -1,9 +1,9 @@
 package = "lua-resty-consul"
-version = "0.3-2"
+version = "0.4-0"
 
 source = {
   url = "git://github.com/hamishforbes/lua-resty-consul.git",
-  tag = "v0.3.2",
+  tag = "v0.4.0",
 }
 
 description = {
